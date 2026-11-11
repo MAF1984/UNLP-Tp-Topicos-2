@@ -1,13 +1,27 @@
 schema: spec-driven
 
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
+project:
+  name: "Ticketera Virtual - Tópicos II"
+  description: "Plataforma de venta de tickets para eventos gestionada con microservicios. Soporta administradores, event owners y clientes."
+context: |
+  Roadmap:
+  - Etapa 1: Core (backend, APIs, autenticación, compra de tickets, mockups).
+  - Etapa 2: Integración (sistema de recomendación y estrategias de cache).
+  - Etapa 3: Escalabilidad (colas de venta para eventos masivos, devoluciones, búsqueda avanzada y stress test).
+
+  Tech stack:
+  - Backend API: Python con FastAPI, Pydantic v2, SQLAlchemy 2 y Alembic.
+  - Web frontend: Flask 3 con Jinja2 y HTMX, usando renderizado del lado del servidor.
+  - Persistencia: PostgreSQL.
+  - Testing: pytest.
+  - Los diseños y las tareas deben abarcar Windows, macOS y Linux.
+  - El backend y el frontend son aplicaciones separadas.
+  - Dockerización: Dockerizar todo lo que sea posible, por ejemplo, la base de datos. Preferir servicios en contenedores para el desarrollo local y la reproducibilidad.
+  
+  Git workflow:
+  - Cada cambio se desarrolla en una rama `E1-feature/<nombre-del-cambio>`, donde el prefijo debe corresponder a la etapa actual ('E1' para etapa 1, 'E2' para etapa 2, 'E3' para etapa 3).
+  - No se permiten commits ni pushes directos.
+  - 
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
