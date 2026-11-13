@@ -1,0 +1,96 @@
+name: CI Pipeline (Test, Sonar, Gemini)
+
+on:
+  pull_request:
+    branches: [ "Development" ]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  test:
+    name: Run Tests
+    # Ejecutamos en Ubuntu para aprovechar el soporte nativo de contenedores (Docker) de GitHub Actions.
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    # Levanta el contenedor de PostgreSQL para los tests
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: secret_password
+          POSTGRES_DB: unlp_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' 
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov
+          # Al estar en carpetas separadas, se instalan ambos requerimientos
+          pip install -r backend/requirements.txt
+          pip install -r frontend/requirements.txt
+
+      - name: Run Alembic Migrations
+        env:
+          # Inyecta la cadena de conexión apuntando al contenedor efímero
+          DATABASE_URL: postgresql://admin:secret_password@localhost:5432/unlp_test_db
+        run: |
+          cd backend
+          alembic upgrade head
+
+      - name: Run Pytest with Coverage
+        env:
+          DATABASE_URL: postgresql://admin:secret_password@localhost:5432/unlp_test_db
+        run: |
+          # Ejecuta los tests y genera el reporte XML necesario para SonarCloud
+          pytest --cov=. --cov-report=xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  sonarcloud:
+    name: SonarCloud Analysis
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Requisito de SonarCloud
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  gemini-review:
+    name: Gemini PR Review
+    needs: sonarcloud
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sshnaidm/gemini-code-review-action@v2
+        with:
+          gemini-key: ${{ secrets.GEMINI_API_KEY }}
