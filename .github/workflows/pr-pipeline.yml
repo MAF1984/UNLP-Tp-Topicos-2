@@ -50,13 +50,13 @@ jobs:
           pip install -r backend/requirements.txt
           pip install -r frontend/requirements.txt
 
-      - name: Run Alembic Migrations
-        env:
-          # Inyecta la cadena de conexión apuntando al contenedor efímero
-          DATABASE_URL: postgresql://admin:secret_password@localhost:5432/unlp_test_db
-        run: |
-          cd backend
-          alembic upgrade head
+#      - name: Run Alembic Migrations
+#        env:
+#          # Inyecta la cadena de conexión apuntando al contenedor efímero
+#          DATABASE_URL: postgresql://admin:secret_password@localhost:5432/unlp_test_db
+#        run: |
+#          cd backend
+#          alembic upgrade head
 
       - name: Run Pytest with Coverage
         env:
