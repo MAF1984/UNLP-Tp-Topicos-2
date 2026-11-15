@@ -22,6 +22,13 @@ context: |
   - Cada cambio se desarrolla en una rama `E1-feature/<nombre-del-cambio>`, donde el prefijo debe corresponder a la etapa actual ('E1' para etapa 1, 'E2' para etapa 2, 'E3' para etapa 3).
   - No se permiten commits ni pushes directos.
   - 
+rules:
+  design:
+    - Leer siempre docs/adr antes de proponer cambios estructurales.
+  specs:
+    - Usar formato Given/When/Then para todos los escenarios.
+
+
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
