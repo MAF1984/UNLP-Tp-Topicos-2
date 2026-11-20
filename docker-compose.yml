@@ -1,0 +1,115 @@
+services:
+  # =========================================================================
+  # Persistencia Relacional: PostgreSQL 16 (Esquemas lógicos por servicio)
+  # =========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: ticketera-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ticketera_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-ticketera_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticketera-network
+
+  # =========================================================================
+  # Cache Distribuido y Soporte de Colas: Redis 7
+  # =========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: ticketera-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticketera-network
+
+  # =========================================================================
+  # Broker de Mensajería: RabbitMQ 3 con Management UI
+  # =========================================================================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: ticketera-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticketera-network
+
+  # =========================================================================
+  # API Gateway / BFF (FastAPI en Python 3.12 - Arquitectura Hexagonal)
+  # =========================================================================
+  gateway:
+    build:
+      context: .
+      dockerfile: src/backend/gateway/Dockerfile
+    container_name: ticketera-gateway
+    restart: unless-stopped
+    environment:
+      PORT: 8000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ticketera_db}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - ticketera-network
+
+networks:
+  ticketera-network:
+    name: ticketera-network
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:

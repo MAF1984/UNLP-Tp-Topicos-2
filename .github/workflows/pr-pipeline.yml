@@ -1,29 +1,29 @@
-name: CI Pipeline (Test, Sonar, Gemini)
+name: CI Pipeline (Lint, Test, Sonar, Gemini)
 
 on:
   pull_request:
-    branches: [ "Development" ]
+    branches: [ "Development", "main" ]
     types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [ "Development" ]
 
 permissions:
   pull-requests: write
   contents: read
 
 jobs:
-  test:
-    name: Run Tests
-    # Ejecutamos en Ubuntu para aprovechar el soporte nativo de contenedores (Docker) de GitHub Actions.
+  lint-and-test:
+    name: Lint and Pytest (Python 3.12)
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
-    
-    # Levanta el contenedor de PostgreSQL para los tests
+
     services:
       postgres:
-        image: postgres:15-alpine
+        image: postgres:16-alpine
         env:
           POSTGRES_USER: admin
           POSTGRES_PASSWORD: secret_password
-          POSTGRES_DB: unlp_test_db
+          POSTGRES_DB: ticketera_db
         ports:
           - 5432:5432
         options: >-
@@ -32,38 +32,60 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      rabbitmq:
+        image: rabbitmq:3-alpine
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' 
+          python-version: '3.12'
           cache: 'pip'
 
-      - name: Install Dependencies
+      - name: Install Dependencies & Linters
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-cov
-          # Al estar en carpetas separadas, se instalan ambos requerimientos
-          pip install -r src/backend/requirements.txt
-          pip install -r src/frontend/requirements.txt
+          pip install ruff pytest pytest-cov pytest-asyncio httpx
+          pip install -r src/backend/gateway/requirements.txt
 
-#      - name: Run Alembic Migrations
-#        env:
-#          # Inyecta la cadena de conexión apuntando al contenedor efímero
-#          DATABASE_URL: postgresql://admin:secret_password@localhost:5432/unlp_test_db
-#        run: |
-#          cd backend
-#          alembic upgrade head
+      - name: Run Linters (Ruff)
+        run: |
+          ruff check .
 
       - name: Run Pytest with Coverage
         env:
-          DATABASE_URL: postgresql://admin:secret_password@localhost:5432/unlp_test_db
+          PYTHONPATH: src/backend/gateway
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: secret_password
+          POSTGRES_DB: ticketera_db
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          RABBITMQ_HOST: localhost
+          RABBITMQ_PORT: 5672
         run: |
-          # Ejecuta los tests y genera el reporte XML necesario para SonarCloud
-          pytest --cov=. --cov-report=xml
+          pytest --cov=src/backend/gateway --cov-report=xml
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -73,12 +95,12 @@ jobs:
 
   sonarcloud:
     name: SonarCloud Analysis
-    needs: test
+    needs: lint-and-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Requisito de SonarCloud
+          fetch-depth: 0
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:

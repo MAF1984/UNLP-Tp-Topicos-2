@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+minversion = "7.0"
+pythonpath = ["src/backend/gateway"]
+testpaths = ["src/backend/tests"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
