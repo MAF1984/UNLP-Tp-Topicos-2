@@ -2,52 +2,52 @@ schema: spec-driven
 
 project:
   name: "Ticketera Virtual - Tópicos II"
-  description: "Plataforma de venta de tickets para eventos gestionada con microservicios. Soporta administradores, event owners y clientes."
+  description: "Plataforma de venta de tickets para eventos gestionada con microservicios (DDD + Arquitectura Hexagonal). Soporta administradores, event owners y clientes."
+
 context: |
-  Roadmap:
-  - Etapa 1: Core (backend, APIs, autenticación, compra de tickets, mockups).
-  - Etapa 2: Integración (sistema de recomendación y estrategias de cache).
-  - Etapa 3: Escalabilidad (colas de venta para eventos masivos, devoluciones, búsqueda avanzada y stress test).
+  Roadmap del Proyecto (3 Etapas Incrementales):
+  - Etapa I: Core del Negocio (APIs, autenticación JWT/RBAC, catálogo de eventos numerados y por zonas, compra con Idempotency-Key y locks en PostgreSQL, saga compensatoria de pagos mockeados, bitácora HTTP estructurada y contratos OpenAPI).
+  - Etapa II: Cache e Inteligencia (Cache Look-Aside en Redis con invalidación reactiva por eventos de dominio y motor de recomendaciones basado en historial y preferencias).
+  - Etapa III: Escalabilidad y Resiliencia (Sala de espera virtual FIFO con tokens de admisión y backpressure, devoluciones con saga y aprobación administrativa, búsqueda multicriterio con PostgreSQL FTS y validación con stress test k6/Locust).
 
-  Tech stack:
-  - Backend API: Python con FastAPI, Pydantic v2, SQLAlchemy 2 y Alembic.
-  - Web frontend: Flask 3 con Jinja2 y HTMX, usando renderizado del lado del servidor.
-  - Persistencia: PostgreSQL.
-  - Testing: pytest.
-  - Los diseños y las tareas deben abarcar Windows, macOS y Linux.
-  - El backend y el frontend son aplicaciones separadas.
-  - Dockerización: Dockerizar todo lo que sea posible, por ejemplo, la base de datos. Preferir servicios en contenedores para el desarrollo local y la reproducibilidad.
-  
-  Git workflow:
-  - Cada cambio se desarrolla en una rama `E1-feature/<nombre-del-cambio>`, donde el prefijo debe corresponder a la etapa actual ('E1' para etapa 1, 'E2' para etapa 2, 'E3' para etapa 3).
-  - No se permiten commits ni pushes directos.
-  - 
+  Tech Stack:
+  - Lenguaje y Runtime: Python 3.12.
+  - Backend Microservicios: FastAPI, Pydantic v2, SQLModel / SQLAlchemy 2, Alembic.
+  - Persistencia: PostgreSQL (estrategia Database-per-Service con esquemas lógicos aislados: identity, catalog, ticketing, payments, reco) + Redis (caché look-aside, locks informativos, colas virtuales).
+  - Broker de Mensajería: RabbitMQ (eventos de dominio con Outbox e Inbox patterns para consistencia eventual).
+  - Web Frontend: Flask 3 con Jinja2 y HTMX (aplicación separada consumiendo el API Gateway).
+  - Testing y Calidad: pytest (tests unitarios, integración y contrato), SonarCloud, k6 / Locust para stress tests.
+  - Infraestructura: Docker y Docker Compose para entorno de desarrollo local reproducible y aislado (Docker-only development).
+
+  Git & Team Workflow:
+  - Ramas principales: main y Development (ambas protegidas, prohibido push directo).
+  - Ramas de cambio: E{N}-feature/<nombre-del-cambio> (partiendo de Development).
+  - Commits: Conventional Commits obligatorios.
+  - Pull Requests: Requiere CI en verde (tests + linters) y 2 aprobaciones (revisor IA + humano).
+
 rules:
-  design:
-    - Leer siempre docs/adr antes de proponer cambios estructurales.
+  proposal:
+    - "Evaluar siempre el impacto arquitectónico y los Bounded Contexts involucrados antes de escribir código."
+    - "Exigir un nuevo ADR en docs/adr/ (o actualización de los existentes) ante cualquier cambio o decisión estructural."
   specs:
-    - Usar formato Given/When/Then para todos los escenarios.
+    - "Redactar especificaciones funcionales y criterios de aceptación obligatoriamente en formato EARS (Easy Approach to Requirements Syntax) y escenarios Given-When-Then."
+    - "Definir con precisión códigos de error HTTP (200, 201, 202, 401, 403, 404, 409 Conflict, 422 Unprocessable Entity, 429 Too Many Requests)."
+  design:
+    - "Leer y respetar estrictamente los ADRs en docs/adr/ antes de proponer cualquier solución técnica."
+    - "Aplicar rigurosamente Arquitectura Hexagonal (Ports & Adapters) en cada microservicio: el dominio no debe tener dependencias de frameworks ni infraestructura (sin imports de FastAPI, SQLAlchemy o SQLModel dentro del núcleo de dominio)."
+    - "Incluir obligatoriamente diagramas de secuencia (formato Mermaid) en design.md para flujos sincrónicos y asincrónicos (compras, sagas compensatorias y colas virtuales)."
+    - "Respetar la estrategia Database-per-Service: prohibidos los JOINs cruzados entre esquemas lógicos de diferentes microservicios; la integración inter-servicio es únicamente vía REST o eventos en RabbitMQ (Transactional Outbox)."
+  tasks:
+    - "Planificar la implementación siguiendo estrictamente TDD (Test-Driven Development): escribir primero los tests (unitarios/integración) en rojo antes de la implementación de la lógica de negocio."
+    - "Desglosar tareas en unidades atómicas, medibles e independientes con verificación explícita."
 
-
-
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
-
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+operations:
+  apply:
+    guidance:
+      - "Seguir ciclo TDD: verificar que los tests fallen antes de implementar la funcionalidad y pasen en verde tras el código."
+      - "Todo código nuevo debe ejecutarse y verificarse dentro de los contenedores Docker del proyecto (docker compose exec / run pytest)."
+  archive:
+    guidance:
+      - "Verificar que la suite completa de tests de pytest y linters pasen exitosamente en verde."
+      - "Actualizar los ADRs en docs/adr/ y los diagramas arquitectónicos C4 / Mermaid si hubo modificaciones estructurales durante el cambio."
+      - "Resumir formalmente el resultado y los artefactos generados antes de cerrar el cambio."
